@@ -3,7 +3,7 @@ from OpenGL.GL import *
 import math
 
 class Car:
-    def __init__(self, x, y, z):
+    def __init__(self, x, y, z, world):
         # Position and orientation
         self.x = x
         self.y = y
@@ -11,6 +11,9 @@ class Car:
         self.angle = 0
         self.velocity = 0
         self.angular_velocity = 0
+        
+        # Store world reference
+        self.world = world
         
         # Basic car properties
         self.mass = 1400  # kg
@@ -30,15 +33,15 @@ class Car:
         self.gear_ratios = [6.0, 3.8, 2.8, 2.0, 1.5, 1.0]
         self.differential_ratio = 3.9
         
-        # Speed limits per gear (in km/h)
-        self.gear_speed_limits = [40, 65, 95, 125, 160, 190]
+        # Revised speed limits per gear (in km/h)
+        self.gear_speed_limits = [25, 50, 80, 125, 160, 200]
         
         # Throttle and power delivery - adjusted for smoother acceleration
         self.throttle = 0
         self.current_throttle = 0
-        self.throttle_smoothing = 0.15     # Quicker throttle response
+        self.throttle_smoothing = 0.15
         self.power_buildup = 0
-        self.power_buildup_rate = 0.4      # Faster power buildup
+        self.power_buildup_rate = 0.4
         self.power_decay_rate = 1.0
         
         # Physics properties - improved ground contact
@@ -139,6 +142,17 @@ class Car:
         self.stall_threshold = 800      # RPM below which engine might stall
         self.min_start_speed = [0, 5, 15, 25, 35, 45]  # Minimum speed (km/h) needed for each gear
         self.stall_chance = [0.0, 0.3, 0.7, 0.9, 0.95, 0.98]  # Chance of stall at low speed per gear
+        
+        # Handbrake properties - adjusted for better drifting
+        self.handbrake = 0.0               # Handbrake input (0-1)
+        self.handbrake_grip_factor = 0.15  # Lower for more slide
+        self.drift_angle = 0.0             # Current drift angle
+        self.lateral_velocity = 0.0        # Sideways velocity component
+        self.drift_momentum = 0.0          # Drift state momentum
+        self.drift_recovery_rate = 0.95    # Slower recovery for longer drifts
+        self.drift_traction = 0.3          # Lower traction during drift
+        self.drift_speed_threshold = 12.0  # Lower speed threshold for drifting
+        self.drift_angle_factor = 2.5      # Stronger drift angle effect
 
     def apply_throttle(self, amount):
         self.throttle = max(0, min(1, amount))
@@ -148,6 +162,9 @@ class Car:
         
     def apply_steering(self, amount):
         self.steering_input = max(-1, min(1, amount))
+
+    def apply_handbrake(self, amount):
+        self.handbrake = max(0, min(1, amount))
 
     def change_gear(self, gear_change):
         if not self.gear_changing:
@@ -161,22 +178,22 @@ class Car:
 
     def calculate_engine_force(self):
         if self.shifting:
-            self.power_buildup *= 0.3
+            self.power_buildup *= 0.5
             return 0
         
-        # Throttle handling
+        # Throttle response
         throttle_diff = self.throttle - self.current_throttle
         self.current_throttle += throttle_diff * self.throttle_smoothing
         
-        # More gradual power buildup
+        # Progressive power buildup
         if self.throttle > 0:
             power_increment = self.power_buildup_rate * self.current_throttle * 0.003  # Reduced from 0.006
             self.power_buildup = min(1.0, self.power_buildup + power_increment)
         else:
             self.power_buildup = max(0.0, self.power_buildup - self.power_decay_rate * 0.008)
-        
+
         current_speed_kmh = abs(self.velocity * 3.6)
-        
+
         # Enhanced first gear launch behavior
         if self.current_gear == 1:
             if current_speed_kmh < self.initial_power_band:
@@ -207,7 +224,7 @@ class Car:
         
         # Check if we can start in current gear
         if current_speed_kmh < self.min_start_speed[self.current_gear - 1]:
-            if self.current_gear > 1:  # Only prevent starting in higher gears
+            if self.current_gear > 2:  # Only prevent starting in higher gears
                 return 0
         
         # Calculate RPM
@@ -238,7 +255,7 @@ class Car:
             speed_factor = current_speed_kmh / (self.min_start_speed[self.current_gear - 1] * 1.2)
             power_factor *= max(0.0, speed_factor - 0.2)
         
-        # Calculate final engine force
+        # Calculate final engine force with all factors
         throttle_power = pow(self.current_throttle * self.power_buildup, 1.1)
         engine_force = (self.engine_power * 
                        power_factor * 
@@ -286,6 +303,42 @@ class Car:
             self.shift_timer -= dt
             if self.shift_timer <= 0:
                 self.shifting = False
+        
+        # Enhanced handbrake physics
+        if self.handbrake > 0:
+            current_speed_kmh = abs(self.velocity * 3.6)
+            
+            # Calculate drift behavior
+            if current_speed_kmh > self.drift_speed_threshold:
+                # More pronounced steering effect during drift
+                steering_factor = self.steering_angle * (current_speed_kmh / 40.0)
+                self.drift_angle += steering_factor * self.handbrake * dt * self.drift_angle_factor
+                
+                # Apply drift physics
+                self.drift_momentum = min(1.0, self.drift_momentum + dt * 1.5)
+                grip_loss = self.handbrake * (1.0 - self.handbrake_grip_factor)
+                
+                # Enhanced vehicle dynamics during drift
+                self.angular_velocity += self.drift_angle * dt * 3.5
+                self.velocity *= (1.0 - grip_loss * 0.15)
+                
+                # More pronounced lateral movement
+                self.lateral_velocity = math.sin(self.drift_angle) * self.velocity * 0.9
+                
+                # Reduce engine power during drift
+                if self.throttle > 0:
+                    self.throttle *= (1.0 - self.handbrake * 0.3)
+        else:
+            # Smoother recovery from drift
+            self.drift_angle *= self.drift_recovery_rate
+            self.drift_momentum = max(0.0, self.drift_momentum - dt * 0.8)
+            self.lateral_velocity *= self.drift_recovery_rate
+        
+        # Apply drift effects to position
+        if abs(self.lateral_velocity) > 0.01:
+            drift_direction = math.atan2(self.lateral_velocity, abs(self.velocity))
+            self.x += self.lateral_velocity * math.cos(self.angle + math.pi/2) * dt
+            self.y += self.lateral_velocity * math.sin(self.angle + math.pi/2) * dt
         
         # Calculate forces
         engine_force = self.calculate_engine_force()
@@ -364,16 +417,18 @@ class Car:
         
         # Natural deceleration
         if self.throttle < 0.1 and not self.brake:
-            self.velocity *= (1.0 - dt * 0.2)
+            self.velocity *= (1.0 - dt * 0.1)
         
         # Simpler RPM calculation
         wheel_rpm = abs(self.velocity) * 60 / (2 * math.pi * 0.3)
         if not self.shifting:
             target_rpm = wheel_rpm * self.gear_ratios[self.current_gear - 1] * self.differential_ratio
             rpm_change_rate = 3000 * dt  # Faster RPM changes
+            rpm_diff = target_rpm - self.current_rpm
+            rpm_change = min(abs(rpm_diff), rpm_change_rate) * (1 if rpm_diff > 0 else -1)
             self.current_rpm = max(self.idle_rpm, 
                                  min(self.max_rpm, 
-                                     self.current_rpm + (target_rpm - self.current_rpm) * 0.2))
+                                     self.current_rpm + rpm_change))
         
         # Speed limits
         self.velocity = max(-self.max_speed/2, min(self.max_speed, self.velocity))
@@ -401,24 +456,67 @@ class Car:
                 # Maintain smooth straightening
                 self.angular_velocity *= self.angular_damping
         
-        # Update angle and position
+        # Update position with terrain following
+        old_x = self.x
+        old_y = self.y
+        
+        # Calculate new position based on velocity
+        new_x = self.x + self.velocity * math.cos(self.angle) * dt
+        new_y = self.y + self.velocity * math.sin(self.angle) * dt
+        
+        # Get terrain heights with proper sampling
+        current_height = self.world.get_height_at(self.x, self.y)
+        new_height = self.world.get_height_at(new_x, new_y)
+        
+        # Calculate slope
+        dx = new_x - self.x
+        dy = new_y - self.y
+        distance = math.sqrt(dx*dx + dy*dy)
+        if distance > 0.001:  # Prevent division by zero
+            slope_angle = math.atan2(new_height - current_height, distance)
+            
+            # Adjust velocity based on slope (more pronounced effect)
+            slope_factor = 1.0 - abs(math.sin(slope_angle)) * 0.05  # Increased from 0.5
+            self.velocity *= slope_factor
+        
+        # Update position with proper height offset
+        self.x = new_x
+        self.y = new_y
+        self.z = new_height + 1.0  # Increased from 0.5 to lift car higher
+        
+        # Calculate terrain normal for car orientation (sample points further apart)
+        front_height = self.world.get_height_at(self.x + math.cos(self.angle) * 2.0, 
+                                              self.y + math.sin(self.angle) * 2.0)
+        right_height = self.world.get_height_at(self.x - math.sin(self.angle) * 2.0, 
+                                              self.y + math.cos(self.angle) * 2.0)
+        
+        # Calculate pitch and roll (more pronounced angles)
+        pitch = math.atan2(front_height - current_height, 2.0) * 1.2
+        roll = math.atan2(right_height - current_height, 2.0) * 1.2
+        
+        # Store orientation for drawing
+        self.pitch = pitch
+        self.roll = roll
+        
+        # Update car angle
         self.angle += self.angular_velocity * dt
-        self.x += self.velocity * math.cos(self.angle) * dt
-        self.y += self.velocity * math.sin(self.angle) * dt
-        self.z = 0.5  # Keep car on ground
-
+        
     def draw(self):
         glPushMatrix()
         
-        # Move to car position and rotate
+        # Move to car position
         glTranslatef(self.x, self.y, self.z)
-        glRotatef(math.degrees(self.angle), 0, 0, 1)
+        
+        # Apply rotations in the correct order
+        glRotatef(math.degrees(self.angle), 0, 0, 1)  # Yaw
+        glRotatef(math.degrees(self.pitch), 0, 1, 0)  # Pitch
+        glRotatef(math.degrees(self.roll), 1, 0, 0)   # Roll
         
         # Draw car body
         glColor3f(1.0, 0.0, 0.0)  # Red color
         self._draw_box(self.length, self.width, self.height)
         
-        # Draw wheels
+        # Draw wheels with terrain adaptation
         self._draw_wheels()
         
         glPopMatrix()
