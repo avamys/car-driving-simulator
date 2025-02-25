@@ -3,9 +3,9 @@ from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
-from car import Car
-from world import World
-from camera import Camera
+from car_sim.car import Car
+from car_sim.world import World
+from car_sim.camera import Camera
 
 class CarSimulator:
     def __init__(self):
@@ -236,7 +236,3 @@ class CarSimulator:
             self.clock.tick(60)
             
         pygame.quit()
-
-if __name__ == "__main__":
-    simulator = CarSimulator()
-    simulator.run() 
