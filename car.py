@@ -456,39 +456,116 @@ class Car:
                 # Maintain smooth straightening
                 self.angular_velocity *= self.angular_damping
         
-        # Update position with terrain following
-        old_x = self.x
-        old_y = self.y
+        # Calculate new position based on velocity and current angle
+        intended_x = self.x + self.velocity * math.cos(self.angle) * dt
+        intended_z = self.y + self.velocity * math.sin(self.angle) * dt  # Note: car's y is world's z
         
-        # Calculate new position based on velocity
-        new_x = self.x + self.velocity * math.cos(self.angle) * dt
-        new_y = self.y + self.velocity * math.sin(self.angle) * dt
+        # Check for tree collisions BEFORE updating position
+        collision_detected = False
+        collision_response = [0, 0]
         
-        # Get terrain heights with proper sampling
-        current_height = self.world.get_height_at(self.x, self.y)
-        new_height = self.world.get_height_at(new_x, new_y)
+        # Get nearby trees from current and adjacent chunks
+        chunk_x = int(self.x / self.world.chunk_size) * self.world.chunk_size
+        chunk_z = int(self.y / self.world.chunk_size) * self.world.chunk_size  # Use y as z
+        
+        # Car's bounding box (using half dimensions for collision)
+        car_radius = max(self.width, self.length) / 2
+        
+        # Check surrounding chunks
+        for dx in [-1, 0, 1]:
+            for dz in [-1, 0, 1]:  # Changed dy to dz to match world coordinates
+                check_chunk = (chunk_x + dx * self.world.chunk_size, 
+                             chunk_z + dz * self.world.chunk_size)
+                
+                # Get trees from TreeSystem
+                if hasattr(self.world, 'vegetation') and check_chunk in self.world.vegetation.chunk_trees:
+                    trees = self.world.vegetation.chunk_trees[check_chunk]
+                    for tree_x, tree_z, tree_type, _ in trees:  # Note: tree coords are in (x,z)
+                        # Calculate distance to intended position
+                        dx = intended_x - tree_x
+                        dz = intended_z - tree_z  # Compare z coordinates
+                        distance = math.sqrt(dx*dx + dz*dz)
+                        
+                        # Tree trunk collision radius (adjust based on tree type)
+                        tree_radius = 0.5  # Base trunk radius
+                        if tree_type == 'PINE':
+                            tree_radius = 0.4
+                        elif tree_type == 'OAK':
+                            tree_radius = 0.6
+                        
+                        # Total collision distance
+                        min_distance = car_radius + tree_radius
+                        
+                        if distance < min_distance:
+                            collision_detected = True
+                            # Calculate normalized bounce direction
+                            if distance > 0:  # Prevent division by zero
+                                bounce_x = dx / distance
+                                bounce_z = dz / distance
+                                collision_response[0] += bounce_x
+                                collision_response[1] += bounce_z
+
+        if collision_detected:
+            # Normalize collision response
+            response_mag = math.sqrt(collision_response[0]**2 + collision_response[1]**2)
+            if response_mag > 0:
+                collision_response[0] /= response_mag
+                collision_response[1] /= response_mag
+            
+            # Calculate impact speed for bounce effect
+            impact_speed = abs(self.velocity)
+            bounce_factor = 0.3  # Base bounce factor
+            
+            # Stronger bounce at higher speeds
+            if impact_speed > 10:
+                bounce_factor = min(0.5, bounce_factor * (impact_speed / 10))
+            
+            # Apply bounce effect
+            self.velocity *= -bounce_factor
+            
+            # Push car away from collision
+            safe_distance = 0.2  # Push back distance
+            intended_x = self.x + collision_response[0] * safe_distance
+            intended_z = self.y + collision_response[1] * safe_distance  # Use z for world coords
+            
+            # Add some angular momentum on impact
+            impact_angle = math.atan2(collision_response[1], collision_response[0])
+            angle_diff = (impact_angle - self.angle) % (2 * math.pi)
+            if angle_diff > math.pi:
+                angle_diff -= 2 * math.pi
+            self.angular_velocity += angle_diff * impact_speed * 0.1
+        
+        # Get terrain heights with proper sampling (note coordinate system)
+        current_height = self.world.get_height_at(self.x, self.y)  # y is used as z in world
+        new_height = self.world.get_height_at(intended_x, intended_z)
         
         # Calculate slope
-        dx = new_x - self.x
-        dy = new_y - self.y
-        distance = math.sqrt(dx*dx + dy*dy)
+        dx = intended_x - self.x
+        dz = intended_z - self.y  # y is world's z coordinate
+        distance = math.sqrt(dx*dx + dz*dz)
+        
         if distance > 0.001:  # Prevent division by zero
             slope_angle = math.atan2(new_height - current_height, distance)
             
             # Adjust velocity based on slope (more pronounced effect)
-            slope_factor = 1.0 - abs(math.sin(slope_angle)) * 0.05  # Increased from 0.5
+            slope_factor = 1.0 - abs(math.sin(slope_angle)) * 0.05
             self.velocity *= slope_factor
         
         # Update position with proper height offset
-        self.x = new_x
-        self.y = new_y
-        self.z = new_height + 1.0  # Increased from 0.5 to lift car higher
+        self.x = intended_x
+        self.y = intended_z  # Car's y coordinate is world's z coordinate
+        self.z = new_height + 1.0  # This is actual height (y in world coordinates)
         
         # Calculate terrain normal for car orientation (sample points further apart)
-        front_height = self.world.get_height_at(self.x + math.cos(self.angle) * 2.0, 
-                                              self.y + math.sin(self.angle) * 2.0)
-        right_height = self.world.get_height_at(self.x - math.sin(self.angle) * 2.0, 
-                                              self.y + math.cos(self.angle) * 2.0)
+        # Note: Using proper coordinate system for sampling terrain heights
+        front_height = self.world.get_height_at(
+            self.x + math.cos(self.angle) * 2.0,
+            self.y + math.sin(self.angle) * 2.0  # y is world's z
+        )
+        right_height = self.world.get_height_at(
+            self.x - math.sin(self.angle) * 2.0,
+            self.y + math.cos(self.angle) * 2.0  # y is world's z
+        )
         
         # Calculate pitch and roll (more pronounced angles)
         pitch = math.atan2(front_height - current_height, 2.0) * 1.2
