@@ -42,9 +42,17 @@ class CarSimulator:
         self.clock = pygame.time.Clock()
         self.running = True
         
-        # Initialize world, car and camera
+        # Initialize world first
         self.world = World()
-        self.car = Car(x=0, y=0, z=0)
+        
+        # Get initial terrain height for car spawn
+        spawn_x, spawn_y = 0, 0  # Spawn coordinates
+        terrain_height = self.world.get_height_at(spawn_x, spawn_y)
+        
+        # Initialize car with world reference and correct height
+        self.car = Car(x=spawn_x, y=spawn_y, z=terrain_height + 1.0, world=self.world)
+        
+        # Initialize camera with car reference
         self.camera = Camera(self.car)
         
         # Add key press tracking
@@ -70,13 +78,19 @@ class CarSimulator:
         # Throttle and brake
         if keys[pygame.K_UP]:
             self.car.apply_throttle(1)
-            self.car.apply_brake(0)
-        elif keys[pygame.K_DOWN]:
-            self.car.apply_throttle(0)
-            self.car.apply_brake(1)
         else:
             self.car.apply_throttle(0)
+        
+        if keys[pygame.K_DOWN]:
+            self.car.apply_brake(1)
+        else:
             self.car.apply_brake(0)
+        
+        # Add handbrake control
+        if keys[pygame.K_SPACE]:
+            self.car.apply_handbrake(1)
+        else:
+            self.car.apply_handbrake(0)
             
         # Gear shifting with cooldown and key press detection
         if current_time - self.last_gear_shift_time >= self.gear_shift_cooldown:

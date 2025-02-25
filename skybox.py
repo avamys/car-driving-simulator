@@ -5,6 +5,22 @@ import math
 
 class Skybox:
     def __init__(self):
+        # Sky states
+        self.sky_states = {
+            'CLEAR': {'color': (0.5, 0.7, 1.0), 'cloud_density': 0.1},
+            'CLOUDY': {'color': (0.7, 0.7, 0.7), 'cloud_density': 0.6},
+            'STORM': {'color': (0.4, 0.4, 0.4), 'cloud_density': 0.9},
+            'SUNSET': {'color': (1.0, 0.6, 0.4), 'cloud_density': 0.3}
+        }
+        
+        self.current_state = 'CLEAR'
+        self.transition_time = 0
+        
+        # Cloud system
+        self.clouds = self.generate_clouds()
+        self.wind_direction = 0
+        self.wind_speed = 1.0
+        
         self.size = 1000.0
         self.display_list = self.create_display_list()
         
@@ -54,4 +70,14 @@ class Skybox:
         
         glDepthMask(GL_TRUE)
         glEnable(GL_LIGHTING)
-        glPopMatrix() 
+        glPopMatrix()
+
+    def generate_clouds(self):
+        # Generate procedural clouds using 3D noise
+        # Implementation here...
+        pass
+    
+    def update(self, dt):
+        # Update cloud positions and handle sky state transitions
+        self.wind_direction += dt * 0.1
+        # Update clouds... 
