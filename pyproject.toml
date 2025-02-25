@@ -1,0 +1,26 @@
+[project]
+name = "car_sim"
+version = "0.1.0"
+description = "A 3D car racing physics simulator"
+authors = [{name = "Dominik Grzegorzewicz", email = "dominik.grzegorzewicz@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "pygame",
+    "PyOpenGL",
+    "numpy",
+]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+car-sim = "car_sim.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/avamys/car-driving-simulator"
+
+[tool.setuptools.packages.find]
+where = ["src"]

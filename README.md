@@ -1,6 +1,20 @@
-# Racing Simulator
+# Car Physics Simulator
 
-A 3D car racing physics simulator built with Python, PyGame, and OpenGL. Experience realistic car physics in a procedurally generated world with dynamic terrain and vegetation.
+A 3D car physics simulator built with Python, PyGame, and OpenGL. Experience realistic car physics in a procedurally generated world with dynamic terrain, vegetation, and road networks.
+
+## Project Structure
+
+```
+car-sim/
+├── main.py          # Main game loop and initialization
+├── car.py           # Vehicle physics and rendering
+├── camera.py        # Third-person camera system
+├── world.py         # World management and chunk loading
+├── terrain.py       # Terrain generation and rendering
+├── vegetation.py    # Tree system and vegetation
+├── road.py          # Road network generation
+└── skybox.py        # Sky rendering and effects
+```
 
 ## Features
 
@@ -36,34 +50,35 @@ A 3D car racing physics simulator built with Python, PyGame, and OpenGL. Experie
 ## Installation
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 or higher
 - pip (Python package installer)
 
-### Required Packages
 ```bash
-pip install pygame
-pip install PyOpenGL
-pip install PyOpenGL_accelerate
-pip install numpy
+# Clone the repository
+git clone https://github.com/avamys/car-driving-simulator.git
+cd car-driving-simulator
+
+# Install the package in editable mode
+pip install -e .
 ```
 
-### Setup
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/car-sim.git
-cd car-sim
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+The package will automatically install all required dependencies:
+- pygame
+- PyOpenGL
+- numpy
 
 ## Running the Simulator
 
-Launch the simulator by running:
+After installation, you can run the simulator in two ways:
+
+1. Using the installed command:
 ```bash
-python main.py
+car-sim
+```
+
+2. Running the module directly:
+```bash
+python -m car_sim
 ```
 
 ## Controls
@@ -119,8 +134,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Future Plans
 
-- [ ] Add multiplayer support
 - [ ] Implement weather effects
 - [ ] Add more vehicle types
 - [ ] Enhance graphics with modern OpenGL features
-- [ ] Add race track editor
